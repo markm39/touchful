@@ -1,0 +1,235 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Base styles */
+:root {
+  --mavs-blue: #00538C;
+  --mavs-navy: #002B5E;
+  --mavs-silver: #BBC4CA;
+  --mavs-light: #C4CED4;
+  --glass-blur: 20px;
+}
+
+* {
+  font-family: "Times New Roman", Times, serif;
+}
+
+body {
+  font-family: "Times New Roman", Times, serif;
+  background: linear-gradient(135deg, #001428 0%, #002B5E 50%, #00538C 100%);
+  min-height: 100vh;
+  color: #fff;
+  overflow-x: hidden;
+}
+
+/* Animated background orbs */
+body::before,
+body::after {
+  content: '';
+  position: fixed;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.4;
+  z-index: -1;
+  animation: float 8s ease-in-out infinite;
+}
+
+body::before {
+  width: 600px;
+  height: 600px;
+  background: radial-gradient(circle, rgba(0, 83, 140, 0.6) 0%, transparent 70%);
+  top: -200px;
+  right: -200px;
+}
+
+body::after {
+  width: 500px;
+  height: 500px;
+  background: radial-gradient(circle, rgba(187, 196, 202, 0.3) 0%, transparent 70%);
+  bottom: -150px;
+  left: -150px;
+  animation-delay: -4s;
+}
+
+@keyframes float {
+  0%, 100% { transform: translate(0, 0) rotate(0deg); }
+  33% { transform: translate(30px, -30px) rotate(5deg); }
+  66% { transform: translate(-20px, 20px) rotate(-5deg); }
+}
+
+/* Liquid Glass component styles */
+@layer components {
+  .glass-panel {
+    background: rgba(0, 43, 94, 0.35);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(187, 196, 202, 0.2);
+    border-radius: 24px;
+    box-shadow: 
+      0 8px 32px rgba(0, 20, 40, 0.4),
+      inset 0 1px 0 rgba(255, 255, 255, 0.1),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.1);
+  }
+
+  .glass-panel-light {
+    background: rgba(187, 196, 202, 0.15);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 16px;
+    box-shadow: 
+      0 4px 16px rgba(0, 20, 40, 0.2),
+      inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  }
+
+  .glass-button {
+    background: linear-gradient(135deg, rgba(0, 83, 140, 0.6) 0%, rgba(0, 43, 94, 0.8) 100%);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(187, 196, 202, 0.3);
+    border-radius: 12px;
+    padding: 12px 28px;
+    font-family: "Times New Roman", Times, serif;
+    font-size: 1rem;
+    font-weight: 500;
+    color: #fff;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 
+      0 4px 16px rgba(0, 43, 94, 0.4),
+      inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  }
+
+  .glass-button:hover {
+    background: linear-gradient(135deg, rgba(0, 103, 160, 0.7) 0%, rgba(0, 63, 114, 0.9) 100%);
+    border-color: rgba(187, 196, 202, 0.5);
+    transform: translateY(-2px);
+    box-shadow: 
+      0 8px 24px rgba(0, 83, 140, 0.5),
+      inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  }
+
+  .glass-button:active {
+    transform: translateY(0);
+  }
+
+  .glass-button-accent {
+    background: linear-gradient(135deg, rgba(0, 83, 140, 0.9) 0%, rgba(0, 43, 94, 1) 100%);
+    border: 1px solid rgba(187, 196, 202, 0.4);
+    box-shadow: 
+      0 4px 20px rgba(0, 83, 140, 0.6),
+      inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  }
+
+  .glass-input {
+    background: rgba(0, 20, 40, 0.4);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(187, 196, 202, 0.2);
+    border-radius: 12px;
+    padding: 14px 18px;
+    font-family: "Times New Roman", Times, serif;
+    font-size: 1rem;
+    color: #fff;
+    transition: all 0.3s ease;
+  }
+
+  .glass-input:focus {
+    outline: none;
+    border-color: rgba(0, 83, 140, 0.6);
+    box-shadow: 0 0 20px rgba(0, 83, 140, 0.3);
+  }
+
+  .glass-input::placeholder {
+    color: rgba(187, 196, 202, 0.6);
+  }
+
+  /* Shimmer effect for loading states */
+  .shimmer {
+    background: linear-gradient(
+      90deg,
+      rgba(187, 196, 202, 0) 0%,
+      rgba(187, 196, 202, 0.2) 50%,
+      rgba(187, 196, 202, 0) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 2s linear infinite;
+  }
+
+  /* Drop zone styles */
+  .drop-zone {
+    border: 2px dashed rgba(187, 196, 202, 0.4);
+    border-radius: 20px;
+    transition: all 0.3s ease;
+  }
+
+  .drop-zone:hover,
+  .drop-zone.drag-over {
+    border-color: rgba(0, 83, 140, 0.8);
+    background: rgba(0, 83, 140, 0.1);
+    box-shadow: 0 0 40px rgba(0, 83, 140, 0.3);
+  }
+
+  /* Timeline styles */
+  .timeline-track {
+    background: rgba(0, 20, 40, 0.6);
+    border-radius: 8px;
+    height: 60px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .timeline-marker {
+    position: absolute;
+    width: 3px;
+    height: 100%;
+    background: linear-gradient(180deg, #00538C 0%, #BBC4CA 100%);
+    border-radius: 2px;
+    box-shadow: 0 0 10px rgba(0, 83, 140, 0.8);
+  }
+
+  .tap-indicator {
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    background: radial-gradient(circle, #BBC4CA 0%, #00538C 100%);
+    border-radius: 50%;
+    transform: translateX(-50%);
+    box-shadow: 0 0 8px rgba(0, 83, 140, 0.6);
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .tap-indicator:hover {
+    transform: translateX(-50%) scale(1.3);
+    box-shadow: 0 0 16px rgba(0, 83, 140, 0.8);
+  }
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(0, 20, 40, 0.4);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 83, 140, 0.6);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 83, 140, 0.8);
+}
+
+/* Selection styling */
+::selection {
+  background: rgba(0, 83, 140, 0.5);
+  color: #fff;
+}
+
