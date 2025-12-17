@@ -1,0 +1,61 @@
+{
+  "name": "webm-muxer",
+  "version": "5.1.4",
+  "description": "WebM multiplexer in pure TypeScript with support for WebCodecs API, video & audio.",
+  "main": "./build/webm-muxer.js",
+  "module": "./build/webm-muxer.mjs",
+  "types": "./build/webm-muxer.d.ts",
+  "exports": {
+    "types": "./build/webm-muxer.d.ts",
+    "import": "./build/webm-muxer.mjs",
+    "require": "./build/webm-muxer.js"
+  },
+  "files": [
+    "README.md",
+    "package.json",
+    "LICENSE",
+    "build/webm-muxer.js",
+    "build/webm-muxer.mjs",
+    "build/webm-muxer.d.ts"
+  ],
+  "scripts": {
+    "build": "node build.js",
+    "watch": "node build.js --watch",
+    "check": "npx tsc --noEmit --skipLibCheck",
+    "lint": "npx eslint src demo build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Vanilagy/webm-muxer.git"
+  },
+  "author": "Vanilagy",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/Vanilagy/webm-muxer/issues"
+  },
+  "homepage": "https://github.com/Vanilagy/webm-muxer#readme",
+  "dependencies": {
+    "@types/dom-webcodecs": "^0.1.4",
+    "@types/wicg-file-system-access": "^2020.9.5"
+  },
+  "devDependencies": {
+    "@types/node": "^18.11.3",
+    "@typescript-eslint/eslint-plugin": "^5.48.1",
+    "@typescript-eslint/parser": "^5.48.1",
+    "esbuild": "^0.15.12",
+    "eslint": "^8.32.0",
+    "typescript": "^4.8.4"
+  },
+  "keywords": [
+    "webm",
+    "muxer",
+    "muxing",
+    "multiplexer",
+    "video",
+    "audio",
+    "subtitles",
+    "webvtt",
+    "media",
+    "webcodecs"
+  ]
+}
