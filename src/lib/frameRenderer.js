@@ -118,25 +118,29 @@ function drawTapAnimation(ctx, tap, progress, scaledWidth, scaledHeight, cropX, 
  * @param {number} maxWidth - Maximum output width
  * @param {number} maxHeight - Maximum output height
  * @param {Object} appliedCrop - Crop bounds as percentages {x, y, width, height}
+ * @param {boolean} showDeviceFrame - Whether device frame mode is on
  */
-export function getOutputDimensions(outputAspect, videoW, videoH, maxWidth = 1080, maxHeight = 1920, appliedCrop = null) {
+export function getOutputDimensions(outputAspect, videoW, videoH, maxWidth = 1080, maxHeight = 1920, appliedCrop = null, showDeviceFrame = false) {
   const outputAspectConfig = OUTPUT_ASPECTS[outputAspect]
   let targetAspect
 
   if (outputAspect === 'match') {
-    // Check if there's an active crop
     const hasCrop = appliedCrop && (appliedCrop.width !== 100 || appliedCrop.height !== 100)
-    if (hasCrop) {
-      // Crop percentages are relative to the output canvas, which matches the video aspect.
-      // To get the true cropped region's aspect ratio:
-      // actualAspect = (cropWidth% * videoW) / (cropHeight% * videoH)
-      //              = (cropWidth / cropHeight) * (videoW / videoH)
+
+    if (showDeviceFrame) {
+      // Device frame mode: output matches video aspect, crop only affects what's shown inside device
+      targetAspect = videoW / videoH
+    } else if (hasCrop) {
+      // Video only mode with crop: output matches cropped region's aspect
+      // Crop percentages are relative to output canvas (which matches video aspect)
+      // True crop aspect = (cropWidth / cropHeight) * (videoW / videoH)
       targetAspect = (appliedCrop.width / appliedCrop.height) * (videoW / videoH)
     } else {
-      // No crop - use original video aspect ratio
+      // Video only mode, no crop: output matches video aspect
       targetAspect = videoW / videoH
     }
   } else {
+    // Fixed aspect ratio (9:16, 4:5, etc.) - always use that aspect
     targetAspect = outputAspectConfig.ratio
   }
 
@@ -211,11 +215,32 @@ export function renderFrame({
     drawX = 0
     drawY = 0
   } else {
+    // Device frame mode: device should maintain video/cropped content aspect ratio
+    // Calculate content aspect ratio (accounting for crop)
+    const hasCropForAspect = appliedCrop.x !== 0 || appliedCrop.y !== 0 || appliedCrop.width !== 100 || appliedCrop.height !== 100
+    let contentAspect
+    if (hasCropForAspect) {
+      // Use cropped region's aspect ratio
+      contentAspect = (appliedCrop.width / appliedCrop.height) * (videoW / videoH)
+    } else {
+      contentAspect = videoW / videoH
+    }
+
     // For device frame mode, use a default scale if user hasn't adjusted it
-    // This matches the visual padding in the preview UI
     const effectiveScale = userScale === 1 ? 0.85 : userScale
-    scaledWidth = outputCanvas.width * effectiveScale
-    scaledHeight = outputCanvas.height * effectiveScale
+
+    // Fit device with content aspect ratio into output canvas (no stretching)
+    const canvasAspect = outputCanvas.width / outputCanvas.height
+    if (contentAspect > canvasAspect) {
+      // Content is wider than canvas - fit to width
+      scaledWidth = outputCanvas.width * effectiveScale
+      scaledHeight = scaledWidth / contentAspect
+    } else {
+      // Content is taller than canvas - fit to height
+      scaledHeight = outputCanvas.height * effectiveScale
+      scaledWidth = scaledHeight * contentAspect
+    }
+
     drawX = (outputCanvas.width - scaledWidth) / 2 + offsetX
     drawY = (outputCanvas.height - scaledHeight) / 2 + offsetY
   }
@@ -360,8 +385,8 @@ export function createFrameRenderer(videoElement, settings) {
   const videoW = videoElement.videoWidth
   const videoH = videoElement.videoHeight
 
-  // Get output dimensions (pass appliedCrop so 'match' mode uses cropped aspect)
-  const { width: outW, height: outH } = getOutputDimensions(outputAspect, videoW, videoH, 1080, 1920, appliedCrop)
+  // Get output dimensions (pass appliedCrop and showDeviceFrame for correct aspect calculation)
+  const { width: outW, height: outH } = getOutputDimensions(outputAspect, videoW, videoH, 1080, 1920, appliedCrop, showDeviceFrame)
 
   // Create canvases
   const sourceCanvas = document.createElement('canvas')

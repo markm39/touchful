@@ -69,8 +69,8 @@ export async function exportFast(videoFile, settings, onProgress) {
   const duration = video.duration
   const fps = 30
 
-  // Get output dimensions (pass appliedCrop so 'match' uses cropped aspect, ensure even for H.264)
-  let { width: outW, height: outH } = getOutputDimensions(outputAspect, videoW, videoH, 1080, 1920, appliedCrop)
+  // Get output dimensions (pass appliedCrop and showDeviceFrame for correct aspect, ensure even for H.264)
+  let { width: outW, height: outH } = getOutputDimensions(outputAspect, videoW, videoH, 1080, 1920, appliedCrop, showDeviceFrame)
   outW = Math.ceil(outW / 2) * 2
   outH = Math.ceil(outH / 2) * 2
 

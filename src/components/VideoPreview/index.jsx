@@ -14,14 +14,14 @@ const DEVICES = {
   wide: { name: 'Widescreen', aspect: '16/9', radius: 12, bezel: 4 },
 }
 
-// Gradient backgrounds
+// Gradient backgrounds (gradient for CSS, colors for canvas)
 const BACKGROUNDS = {
-  midnight: { name: 'Midnight', gradient: 'linear-gradient(135deg, #0c0c1e 0%, #1a1a3e 50%, #2d1b4e 100%)' },
-  ocean: { name: 'Ocean', gradient: 'linear-gradient(135deg, #001428 0%, #003366 50%, #004d80 100%)' },
-  sunset: { name: 'Sunset', gradient: 'linear-gradient(135deg, #1a0a2e 0%, #3d1a5c 30%, #6b2d5b 60%, #8b3a4f 100%)' },
-  aurora: { name: 'Aurora', gradient: 'linear-gradient(135deg, #0a1628 0%, #1a3a4a 30%, #2a5a5a 60%, #1a4a3a 100%)' },
-  ember: { name: 'Ember', gradient: 'linear-gradient(135deg, #1a0a0a 0%, #3d1a1a 40%, #5c2a1a 70%, #4a2010 100%)' },
-  lavender: { name: 'Lavender', gradient: 'linear-gradient(135deg, #1a1a2e 0%, #2a2a4e 40%, #3a3a6e 70%, #4a4a8e 100%)' },
+  midnight: { name: 'Midnight', gradient: 'linear-gradient(135deg, #0c0c1e 0%, #1a1a3e 50%, #2d1b4e 100%)', colors: ['#0c0c1e', '#1a1a3e', '#2d1b4e'] },
+  ocean: { name: 'Ocean', gradient: 'linear-gradient(135deg, #001428 0%, #003366 50%, #004d80 100%)', colors: ['#001428', '#003366', '#004d80'] },
+  sunset: { name: 'Sunset', gradient: 'linear-gradient(135deg, #1a0a2e 0%, #3d1a5c 30%, #6b2d5b 60%, #8b3a4f 100%)', colors: ['#1a0a2e', '#3d1a5c', '#6b2d5b', '#8b3a4f'] },
+  aurora: { name: 'Aurora', gradient: 'linear-gradient(135deg, #0a1628 0%, #1a3a4a 30%, #2a5a5a 60%, #1a4a3a 100%)', colors: ['#0a1628', '#1a3a4a', '#2a5a5a', '#1a4a3a'] },
+  ember: { name: 'Ember', gradient: 'linear-gradient(135deg, #1a0a0a 0%, #3d1a1a 40%, #5c2a1a 70%, #4a2010 100%)', colors: ['#1a0a0a', '#3d1a1a', '#5c2a1a', '#4a2010'] },
+  lavender: { name: 'Lavender', gradient: 'linear-gradient(135deg, #1a1a2e 0%, #2a2a4e 40%, #3a3a6e 70%, #4a4a8e 100%)', colors: ['#1a1a2e', '#2a2a4e', '#3a3a6e', '#4a4a8e'] },
 }
 
 // Tap animations
@@ -81,6 +81,7 @@ function VideoPreview({
   const containerRef = useRef(null)
   const cameraEngineRef = useRef(null)
   const animationFrameRef = useRef(null)
+  const renderStateRef = useRef({ scaledWidth: 0, scaledHeight: 0, finalCropWidth: 0, finalCropHeight: 0, drawX: 0, drawY: 0 })
 
   // Custom hooks
   const { opencvReady } = useOpenCVInit()
@@ -113,10 +114,10 @@ function VideoPreview({
   const [tapDragStart, setTapDragStart] = useState(null)
 
   // Draw tap animation helper
-  const drawTapAnimation = useCallback((ctx, tap, progress, canvasWidth, canvasHeight, cropX, cropY, cropWidth, cropHeight) => {
+  const drawTapAnimation = useCallback((ctx, tap, progress, canvasWidth, canvasHeight, cropX, cropY, cropWidth, cropHeight, offsetX = 0, offsetY = 0) => {
     if (!tap.animation || tap.animation === 'none') return
-    const x = ((tap.x - cropX) / cropWidth) * canvasWidth
-    const y = ((tap.y - cropY) / cropHeight) * canvasHeight
+    const x = ((tap.x - cropX) / cropWidth) * canvasWidth + offsetX
+    const y = ((tap.y - cropY) / cropHeight) * canvasHeight + offsetY
     const anim = TAP_ANIMATIONS[tap.animation] || TAP_ANIMATIONS.ripple
     const alpha = 1 - progress
     ctx.save()
@@ -180,16 +181,22 @@ function VideoPreview({
     const videoH = video.videoHeight || 1920
 
     // Set output canvas size based on output aspect ratio
-    // For 'match' mode: use cropped aspect ratio if crop is applied
+    // Device frame mode: output = selected aspect, crop only affects device content
+    // Video only mode: output = cropped aspect (for 'match') or selected aspect
     const maxWidth = 340, maxHeight = 600
     const outputAspectConfig = OUTPUT_ASPECTS[outputAspect]
     const renderHasCrop = appliedCrop.width !== 100 || appliedCrop.height !== 100
     let targetAspect
     if (outputAspect === 'match') {
-      // Crop percentages are relative to output canvas. Multiply by video aspect to get true crop aspect.
-      targetAspect = renderHasCrop
-        ? (appliedCrop.width / appliedCrop.height) * (videoW / videoH)
-        : videoW / videoH
+      if (showDeviceFrame) {
+        // Device frame: output matches video, crop affects device content only
+        targetAspect = videoW / videoH
+      } else if (renderHasCrop) {
+        // Video only with crop: output matches cropped region
+        targetAspect = (appliedCrop.width / appliedCrop.height) * (videoW / videoH)
+      } else {
+        targetAspect = videoW / videoH
+      }
     } else {
       targetAspect = outputAspectConfig.ratio
     }
@@ -218,13 +225,74 @@ function VideoPreview({
         drawX = 0
         drawY = 0
       } else {
-        scaledWidth = outputCanvas.width * scale
-        scaledHeight = outputCanvas.height * scale
+        // Device frame mode: device should maintain video/cropped content aspect ratio
+        const hasCropForAspect = appliedCrop.x !== 0 || appliedCrop.y !== 0 || appliedCrop.width !== 100 || appliedCrop.height !== 100
+        let contentAspect
+        if (hasCropForAspect) {
+          contentAspect = (appliedCrop.width / appliedCrop.height) * (videoW / videoH)
+        } else {
+          contentAspect = videoW / videoH
+        }
+
+        // Use default scale of 0.85 for margins if user hasn't adjusted
+        const effectiveScale = scale === 1 ? 0.85 : scale
+
+        // Fit device with content aspect ratio into output canvas (no stretching)
+        const canvasAspect = outputCanvas.width / outputCanvas.height
+        if (contentAspect > canvasAspect) {
+          scaledWidth = outputCanvas.width * effectiveScale
+          scaledHeight = scaledWidth / contentAspect
+        } else {
+          scaledHeight = outputCanvas.height * effectiveScale
+          scaledWidth = scaledHeight * contentAspect
+        }
+
         drawX = (outputCanvas.width - scaledWidth) / 2 + offsetX
         drawY = (outputCanvas.height - scaledHeight) / 2 + offsetY
       }
-      outCtx.fillStyle = '#000'
-      outCtx.fillRect(0, 0, outputCanvas.width, outputCanvas.height)
+
+      // Get device settings for frame rendering
+      const device = DEVICES[selectedDevice] || DEVICES.match
+      const scaleFactor = outputCanvas.width / 340
+      const frameRadius = device.radius * scaleFactor
+      const frameBezel = device.bezel * scaleFactor
+
+      // Draw background
+      if (showDeviceFrame && !stretch) {
+        // Draw gradient background for device frame mode
+        const bg = BACKGROUNDS[selectedBackground] || BACKGROUNDS.ocean
+        const gradient = outCtx.createLinearGradient(0, 0, outputCanvas.width, outputCanvas.height)
+        const colors = bg.colors
+        colors.forEach((color, i) => {
+          gradient.addColorStop(i / (colors.length - 1), color)
+        })
+        outCtx.fillStyle = gradient
+        outCtx.fillRect(0, 0, outputCanvas.width, outputCanvas.height)
+
+        // Draw device frame (black rounded rectangle with bezel)
+        const frameX = drawX - frameBezel
+        const frameY = drawY - frameBezel
+        const frameW = scaledWidth + frameBezel * 2
+        const frameH = scaledHeight + frameBezel * 2
+
+        outCtx.fillStyle = 'rgba(0, 0, 0, 0.9)'
+        outCtx.beginPath()
+        outCtx.roundRect(frameX, frameY, frameW, frameH, frameRadius)
+        outCtx.fill()
+
+        // Add subtle shadow effect
+        outCtx.shadowColor = 'rgba(0, 0, 0, 0.5)'
+        outCtx.shadowBlur = 20 * scaleFactor
+        outCtx.shadowOffsetY = 5 * scaleFactor
+        outCtx.fill()
+        outCtx.shadowColor = 'transparent'
+        outCtx.shadowBlur = 0
+        outCtx.shadowOffsetY = 0
+      } else {
+        // Solid black for video-only mode
+        outCtx.fillStyle = '#000'
+        outCtx.fillRect(0, 0, outputCanvas.width, outputCanvas.height)
+      }
 
       // Handle crop: modify source region so cropped content fills output
       const hasCrop = appliedCrop.x !== 0 || appliedCrop.y !== 0 || appliedCrop.width !== 100 || appliedCrop.height !== 100
@@ -241,7 +309,49 @@ function VideoPreview({
         finalCropHeight = (appliedCrop.height / 100) * cropHeight
       }
 
+      // Store render state for tap dragging
+      renderStateRef.current = { scaledWidth, scaledHeight, finalCropWidth, finalCropHeight, drawX, drawY }
+
+      // Clip video to rounded corners (inside the bezel)
+      if (showDeviceFrame && !stretch) {
+        outCtx.save()
+        const innerRadius = Math.max(0, frameRadius - frameBezel)
+        outCtx.beginPath()
+        outCtx.roundRect(drawX, drawY, scaledWidth, scaledHeight, innerRadius)
+        outCtx.clip()
+      }
+
       outCtx.drawImage(canvas, finalCropX, finalCropY, finalCropWidth, finalCropHeight, drawX, drawY, scaledWidth, scaledHeight)
+
+      // Restore clip if device frame was used
+      if (showDeviceFrame && !stretch) {
+        outCtx.restore()
+      }
+
+      // Draw notch/dynamic island and home indicator
+      if (showDeviceFrame && !stretch && showNotch) {
+        const notchWidth = 80 * scaleFactor
+        const notchHeight = 20 * scaleFactor
+        const notchX = drawX + (scaledWidth - notchWidth) / 2
+        const notchY = drawY
+        const notchRadius = 10 * scaleFactor
+
+        outCtx.fillStyle = '#000'
+        outCtx.beginPath()
+        outCtx.roundRect(notchX, notchY, notchWidth, notchHeight, [0, 0, notchRadius, notchRadius])
+        outCtx.fill()
+
+        // Home indicator at bottom
+        const homeWidth = 80 * scaleFactor
+        const homeHeight = 4 * scaleFactor
+        const homeX = drawX + (scaledWidth - homeWidth) / 2
+        const homeY = drawY + scaledHeight - 8 * scaleFactor
+
+        outCtx.fillStyle = 'rgba(255, 255, 255, 0.3)'
+        outCtx.beginPath()
+        outCtx.roundRect(homeX, homeY, homeWidth, homeHeight, homeHeight / 2)
+        outCtx.fill()
+      }
 
       // Debug view
       if (showDebug && ctx) {
@@ -281,7 +391,7 @@ function VideoPreview({
         const tapStart = tap.time, tapEnd = tap.time + 0.6
         if (video.currentTime >= tapStart && video.currentTime <= tapEnd) {
           const progress = (video.currentTime - tapStart) / 0.6
-          drawTapAnimation(outCtx, tap, progress, scaledWidth, scaledHeight, finalCropX, finalCropY, finalCropWidth, finalCropHeight)
+          drawTapAnimation(outCtx, tap, progress, scaledWidth, scaledHeight, finalCropX, finalCropY, finalCropWidth, finalCropHeight, drawX, drawY)
         }
       }
 
@@ -307,7 +417,7 @@ function VideoPreview({
       }
     }
     animationFrameRef.current = requestAnimationFrame(render)
-  }, [tapEvents, zoomLevel, videoTransform, selectedTapIndex, drawTapAnimation, appliedCrop, outputAspect, showDeviceFrame, showDebug])
+  }, [tapEvents, zoomLevel, videoTransform, selectedTapIndex, drawTapAnimation, appliedCrop, outputAspect, showDeviceFrame, showDebug, selectedDevice, selectedBackground, showNotch])
 
   useEffect(() => {
     animationFrameRef.current = requestAnimationFrame(render)
@@ -471,15 +581,22 @@ function VideoPreview({
     if (!isDraggingTap || selectedTapIndex === null || !tapDragStart) return
     const container = containerRef.current
     const video = videoRef.current
-    if (!container || !video) return
+    const outputCanvas = outputCanvasRef.current
+    if (!container || !video || !outputCanvas) return
     const dx = e.clientX - tapDragStart.x
     const dy = e.clientY - tapDragStart.y
     if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
       setTapDragStart(prev => ({ ...prev, hasMoved: true }))
     }
     const rect = container.getBoundingClientRect()
-    const scaleX = (video.videoWidth || 1080) / rect.width
-    const scaleY = (video.videoHeight || 1920) / rect.height
+    const { scaledWidth, scaledHeight, finalCropWidth, finalCropHeight } = renderStateRef.current
+    // Guard against division by zero before render state is set
+    if (!scaledWidth || !scaledHeight) return
+    // Convert screen delta to video delta accounting for canvas scale and crop
+    const canvasToScreenX = rect.width / outputCanvas.width
+    const canvasToScreenY = rect.height / outputCanvas.height
+    const scaleX = (finalCropWidth / scaledWidth) / canvasToScreenX
+    const scaleY = (finalCropHeight / scaledHeight) / canvasToScreenY
     const tap = tapEvents[selectedTapIndex]
     const newX = Math.max(0, Math.min(video.videoWidth || 1080, tap.x + dx * scaleX))
     const newY = Math.max(0, Math.min(video.videoHeight || 1920, tap.y + dy * scaleY))
@@ -525,12 +642,10 @@ function VideoPreview({
         {/* Preview */}
         <div className="flex-1 flex flex-col items-center">
           {showDeviceFrame ? (
-            /* Device + Background Mode */
-            <div className="relative w-full max-w-[340px] rounded-2xl p-6 shadow-glass-lg" style={{ background: background.gradient }}>
-              <div className="relative mx-auto bg-black/90 shadow-2xl" style={{ borderRadius: `${device.radius}px`, padding: `${device.bezel}px`, maxWidth: previewAspect > 1 ? '100%' : '240px' }}>
-                <div ref={containerRef} className={`relative overflow-hidden bg-mavs-navy ${calibrationStep ? 'cursor-crosshair' : 'cursor-move'}`} style={{ borderRadius: `${Math.max(0, device.radius - device.bezel)}px`, aspectRatio: previewAspect }} onClick={(e) => calibrationStep && handleCalibrationClick(e)}>
-                  <canvas ref={outputCanvasRef} className={`absolute inset-0 w-full h-full object-cover ${calibrationStep ? 'cursor-crosshair' : ''}`} onClick={(e) => { if (calibrationStep) handleCalibrationClick(e); else if (!editMode && !cropMode && selectedTapIndex !== null && onSelectTap) onSelectTap(null) }} />
-                  {showNotch && <div className="absolute top-0 left-1/2 -translate-x-1/2 w-20 h-5 bg-black rounded-b-xl pointer-events-none z-10" />}
+            /* Device + Background Mode - Canvas renders everything */
+            <div className="relative w-full max-w-[340px] rounded-2xl overflow-hidden shadow-glass-lg">
+              <div ref={containerRef} className={`relative overflow-hidden ${calibrationStep ? 'cursor-crosshair' : 'cursor-move'}`} style={{ aspectRatio: previewAspect }} onClick={(e) => calibrationStep && handleCalibrationClick(e)}>
+                <canvas ref={outputCanvasRef} className={`absolute inset-0 w-full h-full object-cover ${calibrationStep ? 'cursor-crosshair' : ''}`} onClick={(e) => { if (calibrationStep) handleCalibrationClick(e); else if (!editMode && !cropMode && selectedTapIndex !== null && onSelectTap) onSelectTap(null) }} />
                 <PreviewOverlays
                   videoRef={videoRef} containerRef={containerRef} calibrationStep={calibrationStep}
                   autodetectMode={autodetectMode} targetCirclePos={targetCirclePos} setTargetCirclePos={setTargetCirclePos}
@@ -543,8 +658,6 @@ function VideoPreview({
                   selectedTapIndex={selectedTapIndex} tapEvents={tapEvents}
                   isDraggingTap={isDraggingTap} handleTapDragStart={handleTapDragStart} onSelectTap={onSelectTap}
                 />
-                </div>
-                {showNotch && <div className="absolute bottom-1 left-1/2 -translate-x-1/2 w-20 h-1 bg-white/30 rounded-full" />}
               </div>
             </div>
           ) : (
