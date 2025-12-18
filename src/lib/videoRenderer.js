@@ -129,3 +129,4 @@ export function getEstimatedExportTime(duration, width, height) {
 export function getExportExtension() {
   return 'mp4'
 }
+

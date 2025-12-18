@@ -7,8 +7,8 @@ import { CameraEngine } from './cameraEngine'
 
 // Device presets (must match VideoPreview)
 const DEVICES = {
-  match: { name: 'Match Video', aspect: '9/16', radius: 24, bezel: 0, dynamic: true },
-  iphone: { name: 'iPhone', aspect: '9/19.5', radius: 44, bezel: 8 },
+  match: { name: 'Match Video', aspect: '9/16', radius: 40, bezel: 6, dynamic: true, showNotch: true },
+  iphone: { name: 'iPhone', aspect: '9/19.5', radius: 44, bezel: 8, showNotch: true },
   ipad: { name: 'iPad', aspect: '3/4', radius: 18, bezel: 8 },
   android: { name: 'Android', aspect: '9/20', radius: 32, bezel: 6 },
   square: { name: 'Square', aspect: '1/1', radius: 20, bezel: 8 },
@@ -112,12 +112,30 @@ function drawTapAnimation(ctx, tap, progress, scaledWidth, scaledHeight, cropX, 
 
 /**
  * Get output canvas dimensions for a given aspect ratio and max size
+ * @param {string} outputAspect - Aspect ratio key ('match', '9:16', '4:5', etc.)
+ * @param {number} videoW - Original video width
+ * @param {number} videoH - Original video height
+ * @param {number} maxWidth - Maximum output width
+ * @param {number} maxHeight - Maximum output height
+ * @param {Object} appliedCrop - Crop bounds as percentages {x, y, width, height}
  */
-export function getOutputDimensions(outputAspect, videoW, videoH, maxWidth = 1080, maxHeight = 1920) {
+export function getOutputDimensions(outputAspect, videoW, videoH, maxWidth = 1080, maxHeight = 1920, appliedCrop = null) {
   const outputAspectConfig = OUTPUT_ASPECTS[outputAspect]
   let targetAspect
+
   if (outputAspect === 'match') {
-    targetAspect = videoW / videoH
+    // Check if there's an active crop
+    const hasCrop = appliedCrop && (appliedCrop.width !== 100 || appliedCrop.height !== 100)
+    if (hasCrop) {
+      // Crop percentages are relative to the output canvas, which matches the video aspect.
+      // To get the true cropped region's aspect ratio:
+      // actualAspect = (cropWidth% * videoW) / (cropHeight% * videoH)
+      //              = (cropWidth / cropHeight) * (videoW / videoH)
+      targetAspect = (appliedCrop.width / appliedCrop.height) * (videoW / videoH)
+    } else {
+      // No crop - use original video aspect ratio
+      targetAspect = videoW / videoH
+    }
   } else {
     targetAspect = outputAspectConfig.ratio
   }
@@ -165,6 +183,7 @@ export function renderFrame({
   showDeviceFrame,
   selectedBackground = 'ocean',
   selectedDevice = 'match',
+  showNotch = true,
   camera,
 }) {
   const outCtx = outputCanvas.getContext('2d')
@@ -246,17 +265,25 @@ export function renderFrame({
     outCtx.fillRect(0, 0, outputCanvas.width, outputCanvas.height)
   }
 
-  // Apply crop clipping if needed
+  // Handle crop: for 'match' mode, modify source region so crop fills output
+  // For other modes, use clipping mask
   const hasCrop = appliedCrop.x !== 0 || appliedCrop.y !== 0 || appliedCrop.width !== 100 || appliedCrop.height !== 100
+
+  let finalCropX = cropX
+  let finalCropY = cropY
+  let finalCropWidth = cropWidth
+  let finalCropHeight = cropHeight
+  let useClipping = false
+
   if (hasCrop) {
-    outCtx.save()
-    const clipX = (appliedCrop.x / 100) * outputCanvas.width
-    const clipY = (appliedCrop.y / 100) * outputCanvas.height
-    const clipW = (appliedCrop.width / 100) * outputCanvas.width
-    const clipH = (appliedCrop.height / 100) * outputCanvas.height
-    outCtx.beginPath()
-    outCtx.rect(clipX, clipY, clipW, clipH)
-    outCtx.clip()
+    // For 'match' mode: modify source region so cropped content fills output
+    // The crop percentages define a sub-region of the camera's view
+    finalCropX = cropX + (appliedCrop.x / 100) * cropWidth
+    finalCropY = cropY + (appliedCrop.y / 100) * cropHeight
+    finalCropWidth = (appliedCrop.width / 100) * cropWidth
+    finalCropHeight = (appliedCrop.height / 100) * cropHeight
+    // No clipping needed - the modified source region fills the output
+    useClipping = false
   }
 
   // Clip video to rounded corners (inside the bezel)
@@ -268,15 +295,39 @@ export function renderFrame({
     outCtx.clip()
   }
 
-  // Draw the video frame
-  outCtx.drawImage(sourceCanvas, cropX, cropY, cropWidth, cropHeight, drawX, drawY, scaledWidth, scaledHeight)
+  // Draw the video frame (using modified crop region if applicable)
+  outCtx.drawImage(sourceCanvas, finalCropX, finalCropY, finalCropWidth, finalCropHeight, drawX, drawY, scaledWidth, scaledHeight)
 
   // Restore clip if device frame was used
   if (showDeviceFrame && !stretch) {
     outCtx.restore()
   }
 
-  if (hasCrop) outCtx.restore()
+  // Draw notch/dynamic island and home indicator for devices that have them
+  if (showDeviceFrame && !stretch && showNotch) {
+    // Dynamic island / notch at top
+    const notchWidth = 80 * scaleFactor
+    const notchHeight = 20 * scaleFactor
+    const notchX = drawX + (scaledWidth - notchWidth) / 2
+    const notchY = drawY
+    const notchRadius = 10 * scaleFactor
+
+    outCtx.fillStyle = '#000'
+    outCtx.beginPath()
+    outCtx.roundRect(notchX, notchY, notchWidth, notchHeight, [0, 0, notchRadius, notchRadius])
+    outCtx.fill()
+
+    // Home indicator at bottom
+    const homeWidth = 80 * scaleFactor
+    const homeHeight = 4 * scaleFactor
+    const homeX = drawX + (scaledWidth - homeWidth) / 2
+    const homeY = drawY + scaledHeight - 8 * scaleFactor
+
+    outCtx.fillStyle = 'rgba(255, 255, 255, 0.3)'
+    outCtx.beginPath()
+    outCtx.roundRect(homeX, homeY, homeWidth, homeHeight, homeHeight / 2)
+    outCtx.fill()
+  }
 
   // Draw tap animations (pass drawX/drawY offset for device frame mode)
   for (const tap of tapEvents) {
@@ -284,7 +335,7 @@ export function renderFrame({
     const tapEnd = tap.time + 0.6
     if (currentTime >= tapStart && currentTime <= tapEnd) {
       const progress = (currentTime - tapStart) / 0.6
-      drawTapAnimation(outCtx, tap, progress, scaledWidth, scaledHeight, cropX, cropY, cropWidth, cropHeight, drawX, drawY)
+      drawTapAnimation(outCtx, tap, progress, scaledWidth, scaledHeight, finalCropX, finalCropY, finalCropWidth, finalCropHeight, drawX, drawY)
     }
   }
 }
@@ -303,13 +354,14 @@ export function createFrameRenderer(videoElement, settings) {
     tapEvents,
     selectedBackground = 'ocean',
     selectedDevice = 'match',
+    showNotch = true,
   } = settings
 
   const videoW = videoElement.videoWidth
   const videoH = videoElement.videoHeight
 
-  // Get output dimensions
-  const { width: outW, height: outH } = getOutputDimensions(outputAspect, videoW, videoH)
+  // Get output dimensions (pass appliedCrop so 'match' mode uses cropped aspect)
+  const { width: outW, height: outH } = getOutputDimensions(outputAspect, videoW, videoH, 1080, 1920, appliedCrop)
 
   // Create canvases
   const sourceCanvas = document.createElement('canvas')
@@ -351,6 +403,7 @@ export function createFrameRenderer(videoElement, settings) {
         showDeviceFrame,
         selectedBackground,
         selectedDevice,
+        showNotch,
         camera,
       })
 

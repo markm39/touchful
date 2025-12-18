@@ -41,6 +41,7 @@ export async function exportFast(videoFile, settings, onProgress) {
     zoomLevel = 1.4,
     selectedBackground = 'ocean',
     selectedDevice = 'match',
+    showNotch = true,
   } = settings
 
   onProgress({ phase: 'init', percent: 2, message: 'Loading video...' })
@@ -68,8 +69,8 @@ export async function exportFast(videoFile, settings, onProgress) {
   const duration = video.duration
   const fps = 30
 
-  // Get output dimensions (ensure even for H.264)
-  let { width: outW, height: outH } = getOutputDimensions(outputAspect, videoW, videoH)
+  // Get output dimensions (pass appliedCrop so 'match' uses cropped aspect, ensure even for H.264)
+  let { width: outW, height: outH } = getOutputDimensions(outputAspect, videoW, videoH, 1080, 1920, appliedCrop)
   outW = Math.ceil(outW / 2) * 2
   outH = Math.ceil(outH / 2) * 2
 
@@ -274,6 +275,7 @@ export async function exportFast(videoFile, settings, onProgress) {
         showDeviceFrame,
         selectedBackground,
         selectedDevice,
+        showNotch,
         camera,
       })
 

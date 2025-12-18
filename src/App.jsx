@@ -22,6 +22,7 @@ function App() {
   const [appliedCrop, setAppliedCrop] = useState({ x: 0, y: 0, width: 100, height: 100 })
   const [selectedBackground, setSelectedBackground] = useState('ocean')
   const [selectedDevice, setSelectedDevice] = useState('match')
+  const [showNotch, setShowNotch] = useState(true)
 
   // Ref to access video element for seeking
   const videoRef = useRef(null)
@@ -78,7 +79,8 @@ function App() {
     zoomLevel,
     selectedBackground,
     selectedDevice,
-  }), [tapEvents, outputAspect, showDeviceFrame, videoTransform, appliedCrop, zoomLevel, selectedBackground, selectedDevice])
+    showNotch,
+  }), [tapEvents, outputAspect, showDeviceFrame, videoTransform, appliedCrop, zoomLevel, selectedBackground, selectedDevice, showNotch])
 
   return (
     <div className="min-h-screen p-4 md:p-6">
@@ -146,6 +148,8 @@ function App() {
               setSelectedBackground={setSelectedBackground}
               selectedDevice={selectedDevice}
               setSelectedDevice={setSelectedDevice}
+              showNotch={showNotch}
+              setShowNotch={setShowNotch}
             />
 
             {/* Timeline - right under preview with minimal gap */}

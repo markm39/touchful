@@ -6,8 +6,8 @@ import { PreviewOverlays } from './components'
 
 // Device presets
 const DEVICES = {
-  match: { name: 'Match Video', aspect: '9/16', radius: 24, bezel: 0, dynamic: true },
-  iphone: { name: 'iPhone', aspect: '9/19.5', radius: 44, bezel: 8 },
+  match: { name: 'Match Video', aspect: '9/16', radius: 40, bezel: 6, dynamic: true, showNotch: true },
+  iphone: { name: 'iPhone', aspect: '9/19.5', radius: 44, bezel: 8, showNotch: true },
   ipad: { name: 'iPad', aspect: '3/4', radius: 18, bezel: 8 },
   android: { name: 'Android', aspect: '9/20', radius: 32, bezel: 6 },
   square: { name: 'Square', aspect: '1/1', radius: 20, bezel: 8 },
@@ -71,6 +71,8 @@ function VideoPreview({
   setSelectedBackground,
   selectedDevice,
   setSelectedDevice,
+  showNotch,
+  setShowNotch,
 }) {
   // Refs
   const videoRef = useRef(null)
@@ -178,11 +180,16 @@ function VideoPreview({
     const videoH = video.videoHeight || 1920
 
     // Set output canvas size based on output aspect ratio
+    // For 'match' mode: use cropped aspect ratio if crop is applied
     const maxWidth = 340, maxHeight = 600
     const outputAspectConfig = OUTPUT_ASPECTS[outputAspect]
+    const renderHasCrop = appliedCrop.width !== 100 || appliedCrop.height !== 100
     let targetAspect
     if (outputAspect === 'match') {
-      targetAspect = videoW / videoH
+      // Crop percentages are relative to output canvas. Multiply by video aspect to get true crop aspect.
+      targetAspect = renderHasCrop
+        ? (appliedCrop.width / appliedCrop.height) * (videoW / videoH)
+        : videoW / videoH
     } else {
       targetAspect = outputAspectConfig.ratio
     }
@@ -218,19 +225,23 @@ function VideoPreview({
       }
       outCtx.fillStyle = '#000'
       outCtx.fillRect(0, 0, outputCanvas.width, outputCanvas.height)
+
+      // Handle crop: modify source region so cropped content fills output
       const hasCrop = appliedCrop.x !== 0 || appliedCrop.y !== 0 || appliedCrop.width !== 100 || appliedCrop.height !== 100
+      let finalCropX = cropX
+      let finalCropY = cropY
+      let finalCropWidth = cropWidth
+      let finalCropHeight = cropHeight
+
       if (hasCrop) {
-        outCtx.save()
-        const clipX = (appliedCrop.x / 100) * outputCanvas.width
-        const clipY = (appliedCrop.y / 100) * outputCanvas.height
-        const clipW = (appliedCrop.width / 100) * outputCanvas.width
-        const clipH = (appliedCrop.height / 100) * outputCanvas.height
-        outCtx.beginPath()
-        outCtx.rect(clipX, clipY, clipW, clipH)
-        outCtx.clip()
+        // Modify source region so cropped content fills the output
+        finalCropX = cropX + (appliedCrop.x / 100) * cropWidth
+        finalCropY = cropY + (appliedCrop.y / 100) * cropHeight
+        finalCropWidth = (appliedCrop.width / 100) * cropWidth
+        finalCropHeight = (appliedCrop.height / 100) * cropHeight
       }
-      outCtx.drawImage(canvas, cropX, cropY, cropWidth, cropHeight, drawX, drawY, scaledWidth, scaledHeight)
-      if (hasCrop) outCtx.restore()
+
+      outCtx.drawImage(canvas, finalCropX, finalCropY, finalCropWidth, finalCropHeight, drawX, drawY, scaledWidth, scaledHeight)
 
       // Debug view
       if (showDebug && ctx) {
@@ -270,15 +281,15 @@ function VideoPreview({
         const tapStart = tap.time, tapEnd = tap.time + 0.6
         if (video.currentTime >= tapStart && video.currentTime <= tapEnd) {
           const progress = (video.currentTime - tapStart) / 0.6
-          drawTapAnimation(outCtx, tap, progress, scaledWidth, scaledHeight, cropX, cropY, cropWidth, cropHeight)
+          drawTapAnimation(outCtx, tap, progress, scaledWidth, scaledHeight, finalCropX, finalCropY, finalCropWidth, finalCropHeight)
         }
       }
 
       // Draw selected tap indicator
       if (selectedTapIndex !== null && tapEvents[selectedTapIndex]) {
         const tap = tapEvents[selectedTapIndex]
-        const tapX = ((tap.x - cropX) / cropWidth) * scaledWidth + drawX
-        const tapY = ((tap.y - cropY) / cropHeight) * scaledHeight + drawY
+        const tapX = ((tap.x - finalCropX) / finalCropWidth) * scaledWidth + drawX
+        const tapY = ((tap.y - finalCropY) / finalCropHeight) * scaledHeight + drawY
         outCtx.beginPath()
         outCtx.arc(tapX, tapY, 30, 0, Math.PI * 2)
         outCtx.strokeStyle = '#fff'
@@ -497,7 +508,12 @@ function VideoPreview({
   const device = DEVICES[selectedDevice]
   const background = BACKGROUNDS[selectedBackground]
   // Calculate preview aspect ratio based on output aspect setting
-  const previewAspect = outputAspect === 'match' ? videoAspectRatio : OUTPUT_ASPECTS[outputAspect].ratio
+  // For 'match' mode: use cropped aspect ratio if crop is applied, otherwise original video aspect
+  // Crop percentages are relative to output canvas, so multiply by video aspect to get true crop aspect
+  const hasCrop = appliedCrop.width !== 100 || appliedCrop.height !== 100
+  const previewAspect = outputAspect === 'match'
+    ? (hasCrop ? (appliedCrop.width / appliedCrop.height) * videoAspectRatio : videoAspectRatio)
+    : OUTPUT_ASPECTS[outputAspect].ratio
 
   return (
     <div className="glass-panel p-4">
@@ -514,7 +530,7 @@ function VideoPreview({
               <div className="relative mx-auto bg-black/90 shadow-2xl" style={{ borderRadius: `${device.radius}px`, padding: `${device.bezel}px`, maxWidth: previewAspect > 1 ? '100%' : '240px' }}>
                 <div ref={containerRef} className={`relative overflow-hidden bg-mavs-navy ${calibrationStep ? 'cursor-crosshair' : 'cursor-move'}`} style={{ borderRadius: `${Math.max(0, device.radius - device.bezel)}px`, aspectRatio: previewAspect }} onClick={(e) => calibrationStep && handleCalibrationClick(e)}>
                   <canvas ref={outputCanvasRef} className={`absolute inset-0 w-full h-full object-cover ${calibrationStep ? 'cursor-crosshair' : ''}`} onClick={(e) => { if (calibrationStep) handleCalibrationClick(e); else if (!editMode && !cropMode && selectedTapIndex !== null && onSelectTap) onSelectTap(null) }} />
-                  {selectedDevice === 'iphone' && <div className="absolute top-0 left-1/2 -translate-x-1/2 w-20 h-5 bg-black rounded-b-xl pointer-events-none z-10" />}
+                  {showNotch && <div className="absolute top-0 left-1/2 -translate-x-1/2 w-20 h-5 bg-black rounded-b-xl pointer-events-none z-10" />}
                 <PreviewOverlays
                   videoRef={videoRef} containerRef={containerRef} calibrationStep={calibrationStep}
                   autodetectMode={autodetectMode} targetCirclePos={targetCirclePos} setTargetCirclePos={setTargetCirclePos}
@@ -528,7 +544,7 @@ function VideoPreview({
                   isDraggingTap={isDraggingTap} handleTapDragStart={handleTapDragStart} onSelectTap={onSelectTap}
                 />
                 </div>
-                {(selectedDevice === 'iphone' || selectedDevice === 'ipad') && <div className="absolute bottom-1 left-1/2 -translate-x-1/2 w-20 h-1 bg-white/30 rounded-full" />}
+                {showNotch && <div className="absolute bottom-1 left-1/2 -translate-x-1/2 w-20 h-1 bg-white/30 rounded-full" />}
               </div>
             </div>
           ) : (
@@ -590,6 +606,10 @@ function VideoPreview({
                   {Object.entries(DEVICES).map(([key, dev]) => (
                     <button key={key} onClick={() => setSelectedDevice(key)} className={`px-1 py-1 rounded text-xs transition-all ${selectedDevice === key ? 'bg-mavs-blue text-white' : 'bg-mavs-navy/50 text-mavs-silver'}`}>{dev.name}</button>
                   ))}
+                </div>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-mavs-silver text-xs">Show Notch</p>
+                  <button onClick={() => setShowNotch(!showNotch)} className={`px-2 py-1 rounded text-xs transition-all ${showNotch ? 'bg-mavs-blue text-white' : 'bg-mavs-navy/50 text-mavs-silver'}`}>{showNotch ? 'On' : 'Off'}</button>
                 </div>
                 <p className="text-mavs-silver text-xs mb-1">Background</p>
                 <div className="grid grid-cols-6 gap-1">
